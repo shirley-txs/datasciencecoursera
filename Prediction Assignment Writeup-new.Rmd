@@ -1,0 +1,113 @@
+---
+title: "Prediction Assignment Writeup"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+One thing that people regularly do is quantify how  much of a particular activity they do, but they rarely quantify how well they do it. The objective of this project is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict the manner in which they did the exercise. This is the "classe" variable in the training set. 
+
+Data for the project come from this source: [http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har]
+
+
+## Preparationg and Data Exploration 
+
+Loading the necessary packages: 
+
+```{r 1}
+library(ggplot2)
+library(caret)
+library(e1071)
+library(randomForest)
+```
+
+Downloading the data: 
+
+```{r 2}
+
+#downloading the data 
+df_train <- read.csv('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv')
+df_test <- read.csv('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv')
+```
+
+The dataset contains 160 variable. Likely not all are relevant hence we will clean the data for analysis. 
+
+```{r 3}
+
+#remove columns only contain NA's
+df_train <- df_train[, colSums(is.na(df_train)) == 0]
+
+#remove the Near Zero Variance columns 
+NZV <- nearZeroVar(df_train)
+df_train <- df_train[,-NZV]
+
+#remove first few columns that are irrelevant to prediction (i.e. identifiers)
+df_train <- df_train[,-(1:5)]
+
+#checking the dimensions 
+dim(df_train)
+
+#subsetting the test data with the same set of variables
+subset <- names(df_train)
+subset<- subset[c(1:53)] #remove classe from subset
+testing <- df_test[,subset]
+
+```
+
+Dataset now contains 54 variables which is more manageable. 
+
+
+## Building the Model 
+
+We will split the train data in order to perform a cross validation of the model. 
+
+```{r 4}
+#converting class to factor 
+df_train$classe = factor(df_train$classe)
+
+#sub-spliting data into training and validation 
+inTrain <- createDataPartition( y = df_train$classe,
+                                   p = 0.7,
+                                   list = FALSE)
+training <- df_train[inTrain,]
+validation <- df_train[-inTrain,]
+
+#checking the dimensions 
+dim(training)
+dim(validation)
+```
+Now we have 13,737 in the training group and 5,885 in the validation group. 
+
+
+As we are predicting a category (i.e. classe), we will use build a Random Forest with our training data. 
+
+```{r 5}
+#setting the seed to ensure reproducibility 
+set.seed(232) 
+
+#building random forest model with cross validation
+train_control <- trainControl(method="cv", number=5)
+
+modRF <- randomForest(classe~., data=training, method='class', trControl=train_control)
+
+```
+
+
+## Compare predictions with actual value in the validation set
+
+```{r 6}
+predV <- predict(modRF,validation)
+cmRf <- confusionMatrix(predV,validation$classe)
+print(cmRf)
+```
+
+The Random Forest generated an accuracy of 99.8%, which is pretty high. The out of sample error is 0.02 (100 - 99.8%)
+
+Hence, we can go with it and will not be building other models. 
+
+
+
